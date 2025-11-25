@@ -15,12 +15,21 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 # Backend server URL
 BACKEND_URL = "http://localhost:8000"
 
-def get_server_public_key():
-    """Retrieve the server's public key"""
+# Cache the server's public key
+_cached_server_public_key = None
+
+def get_server_public_key(force_refresh=False):
+    """Retrieve the server's public key (cached after first retrieval)"""
+    global _cached_server_public_key
+    
+    if _cached_server_public_key is not None and not force_refresh:
+        return _cached_server_public_key
+    
     response = requests.get(f"{BACKEND_URL}/public-key")
     if response.status_code == 200:
         public_key_pem = response.json()["public_key"].encode()
-        return serialization.load_pem_public_key(public_key_pem)
+        _cached_server_public_key = serialization.load_pem_public_key(public_key_pem)
+        return _cached_server_public_key
     else:
         raise Exception("Failed to retrieve server public key")
 
@@ -65,21 +74,15 @@ def encrypt_data(data: dict, server_public_key):
         "iv": base64.b64encode(iv).decode()
     }
 
-def send_encrypted_data(data: dict):
+def send_encrypted_data(data: dict, server_public_key):
     """Send encrypted health data to the backend server"""
     try:
-        # Get server's public key
-        print("Retrieving server public key...")
-        server_public_key = get_server_public_key()
-        print("✓ Server public key retrieved")
-        
         # Encrypt the data
-        print(f"\nEncrypting data: {data}")
+        print(f"Encrypting data: {data}")
         encrypted_payload = encrypt_data(data, server_public_key)
-        print("✓ Data encrypted successfully")
+        print("✓ Data encrypted")
         
         # Send encrypted data to the server
-        print("\nSending encrypted data to server...")
         response = requests.post(
             f"{BACKEND_URL}/ecc-decode",
             json=encrypted_payload,
@@ -87,16 +90,17 @@ def send_encrypted_data(data: dict):
         )
         
         # Print response
-        print(f"\nServer Response (Status {response.status_code}):")
-        print(json.dumps(response.json(), indent=2))
+        print(f"Server Response: {response.json()['status']}")
         
         return response.json()
     
     except requests.exceptions.ConnectionError:
         print("❌ Error: Could not connect to the server.")
         print("   Make sure the backend server is running at http://localhost:8000")
+        return None
     except Exception as e:
         print(f"❌ Error: {str(e)}")
+        return None
 
 def generate_random_health_data():
     """Generate random health monitoring data"""
@@ -111,6 +115,15 @@ if __name__ == "__main__":
     print("="*60)
     print("\nPress Ctrl+C to stop\n")
     
+    # Retrieve server public key once at startup
+    print("Retrieving server public key...")
+    try:
+        server_public_key = get_server_public_key()
+        print("✓ Server public key retrieved and cached\n")
+    except Exception as e:
+        print(f"❌ Failed to get server public key: {e}")
+        exit(1)
+    
     transmission_count = 0
     
     try:
@@ -120,14 +133,14 @@ if __name__ == "__main__":
             # Generate random health data
             health_data = generate_random_health_data()
             
-            print(f"\n[Transmission #{transmission_count}]")
+            print(f"\n[Transmission #{transmission_count}] {health_data}")
             print("-" * 60)
             
-            # Send encrypted data
-            send_encrypted_data(health_data)
+            # Send encrypted data (reusing cached public key)
+            send_encrypted_data(health_data, server_public_key)
             
             # Wait before next transmission
-            time.sleep(2)  # 2 second delay between transmissions
+            time.sleep(1)  # 1 second delay between transmissions
             
     except KeyboardInterrupt:
         print("\n\n" + "="*60)
