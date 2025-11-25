@@ -104,7 +104,7 @@ async def websocket_endpoint(websocket: WebSocket):
 async def ecc_decode(data: EncryptedData):
     """Decrypt data encrypted with ECC and broadcast to WebSocket clients"""
     try:
-        print(data)
+        # print(data)
         # Decode the ephemeral public key from the client
         ephemeral_public_key_bytes = base64.b64decode(data.ephemeral_public_key)
         ephemeral_public_key = serialization.load_pem_public_key(ephemeral_public_key_bytes)
