@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECC Health Monitor - WebSocket Stream</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }
+
+        .status {
+            padding: 12px 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status.connected .indicator {
+            background: #28a745;
+        }
+
+        .status.disconnected .indicator {
+            background: #dc3545;
+            animation: none;
+        }
+
+        .status.connecting .indicator {
+            background: #ffc107;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        .metric-unit {
+            font-size: 1rem;
+            opacity: 0.8;
+            margin-left: 5px;
+        }
+
+        .log-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+        }
+
+        .log-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .log-entry {
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            background: white;
+            border-left: 4px solid #667eea;
+            font-size: 0.85rem;
+            font-family: 'Courier New', monospace;
+        }
+
+        .log-entry .timestamp {
+            color: #6c757d;
+            margin-right: 10px;
+        }
+
+        .log-entry.error {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+
+        .log-entry.success {
+            border-left-color: #28a745;
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        button.primary {
+            background: #667eea;
+            color: white;
+        }
+
+        button.secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 ECC Health Monitor</h1>
+        <p class="subtitle">Real-time encrypted health data stream</p>
+
+        <div id="status" class="status connecting">
+            <span class="indicator"></span>
+            <span id="statusText">Connecting to WebSocket...</span>
+        </div>
+
+        <div class="metrics">
+            <div class="metric-card">
+                <div class="metric-label">Heart Rate</div>
+                <div class="metric-value">
+                    <span id="heartRate">--</span>
+                    <span class="metric-unit">bpm</span>
+                </div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">SpO2</div>
+                <div class="metric-value">
+                    <span id="spo2">--</span>
+                    <span class="metric-unit">%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="log-container">
+            <div class="log-title">Activity Log</div>
+            <div id="log"></div>
+        </div>
+
+        <div class="controls">
+            <button class="primary" id="reconnectBtn" disabled onclick="connectWebSocket()">Reconnect</button>
+            <button class="secondary" onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        function updateStatus(status, text) {
+            const statusEl = document.getElementById('status');
+            const statusText = document.getElementById('statusText');
+            const reconnectBtn = document.getElementById('reconnectBtn');
+            
+            statusEl.className = `status ${status}`;
+            statusText.textContent = text;
+            
+            reconnectBtn.disabled = status === 'connected' || status === 'connecting';
+        }
+
+        function addLog(message, type = 'info') {
+            const logEl = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            
+            const now = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="timestamp">[${now}]</span>${message}`;
+            
+            logEl.insertBefore(entry, logEl.firstChild);
+            
+            // Keep only last 50 entries
+            while (logEl.children.length > 50) {
+                logEl.removeChild(logEl.lastChild);
+            }
+        }
+
+        function updateMetrics(data) {
+            if (data['heart rate'] !== undefined) {
+                document.getElementById('heartRate').textContent = data['heart rate'];
+            }
+            if (data['spo2'] !== undefined) {
+                document.getElementById('spo2').textContent = data['spo2'];
+            }
+        }
+
+        function connectWebSocket() {
+            if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+                return;
+            }
+
+            updateStatus('connecting', 'Connecting to WebSocket...');
+            addLog('Attempting to connect to WebSocket server...');
+
+            ws = new WebSocket('ws://localhost:8000/ws');
+
+            ws.onopen = () => {
+                reconnectAttempts = 0;
+                updateStatus('connected', 'Connected to server');
+                addLog('WebSocket connection established', 'success');
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'health_data') {
+                        updateMetrics(data.data);
+                        addLog(`Received: Heart Rate ${data.data['heart rate']} bpm, SpO2 ${data.data['spo2']}%`, 'success');
+                    } else if (data.type === 'connection') {
+                        addLog(data.message, 'success');
+                    } else if (data.type === 'error') {
+                        addLog(`Error: ${data.message}`, 'error');
+                    } else if (data.type === 'ping') {
+                        // Silent ping, keep connection alive
+                    }
+                } catch (e) {
+                    addLog(`Failed to parse message: ${e.message}`, 'error');
+                }
+            };
+
+            ws.onerror = (error) => {
+                addLog('WebSocket error occurred', 'error');
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = () => {
+                updateStatus('disconnected', 'Disconnected from server');
+                addLog('WebSocket connection closed');
+                
+                // Attempt to reconnect
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+                    addLog(`Reconnecting in ${delay/1000} seconds... (Attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+                    setTimeout(connectWebSocket, delay);
+                } else {
+                    addLog('Max reconnection attempts reached. Click Reconnect to try again.', 'error');
+                }
+            };
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+            addLog('Log cleared');
+        }
+
+        // Connect on page load
+        connectWebSocket();
+    </script>
+</body>
+</html>
