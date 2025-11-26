@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecc-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - ecc-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ecc-frontend
+    ports:
+      - "5500:5500"
+    restart: unless-stopped
+    networks:
+      - ecc-network
+
+  nginx:
+    image: nginx:latest
+    container_name: ecc-nginx
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+    networks:
+      - ecc-network
+    depends_on:
+      - backend
+      - frontend
+
+networks:
+  ecc-network:
+    driver: bridge

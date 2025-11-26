@@ -293,7 +293,13 @@
             updateStatus('connecting', 'Connecting to WebSocket...');
             addLog('Attempting to connect to WebSocket server...');
 
-            ws = new WebSocket('ws://localhost:8000/ws');
+            // Use current page's host for WebSocket connection
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host; // Includes port if present
+            const wsUrl = `${protocol}//${host}/ws`;
+            
+            addLog(`Connecting to ${wsUrl}`);
+            ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
                 reconnectAttempts = 0;
